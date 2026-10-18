@@ -307,6 +307,17 @@ public class CoreTests
     }
 
     [TestMethod]
+    public void Factory_EchKeepsOuterHeaderZeroesConfigIdEncAndPayload()
+    {
+        // type 0, kdf 0x0001, aead 0x0003, config_id 0x9a, enc len 4, enc, payload len 3, payload
+        byte[] ech = { 0, 0, 1, 0, 3, 0x9a, 0, 4, 0xe1, 0xe2, 0xe3, 0xe4, 0, 3, 0xd1, 0xd2, 0xd3 };
+        var b = ClientHelloBuilder.Chrome();
+        b.AddExtension(0xfe0d, ech);
+        TlsFingerprint fp = new TlsFingerprintFactory().Create(_parser.Parse(b.BuildHandshake()));
+        Assert.AreEqual("0000010003" + "00" + "0004" + "00000000" + "0003" + "000000", fp.Extensions.Single(x => x.Type == 0xfe0d).DataHex);
+    }
+
+    [TestMethod]
     public void Factory_ExcludesPskAndEarlyData()
     {
         var b = ClientHelloBuilder.Chrome();

@@ -71,7 +71,7 @@ public class TlsFingerprintFactory
 
     private static string Sanitize(TlsExtensionEntry entry)
     {
-        if (entry.Type == EncryptedClientHelloType) return new string('0', entry.DataHex.Length);
+        if (entry.Type == EncryptedClientHelloType) return SanitizeEch(entry.DataHex);
         if (entry.Type != KeyShareType) return entry.DataHex;
 
         byte[] data = Convert.FromHexString(entry.DataHex);
@@ -86,5 +86,33 @@ public class TlsFingerprintFactory
             pos = end;
         }
         return Convert.ToHexString(data).ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// encrypted_client_hello outer: type(1)=0, kdf_id(2), aead_id(2), config_id(1), enc&lt;u16&gt;, payload&lt;u16&gt;.
+    /// Keeps the header (type, cipher suite, both lengths) and zeroes config_id, enc and payload (per-connection
+    /// random); anything that does not parse as that structure is zeroed entirely.
+    /// </summary>
+    private static string SanitizeEch(string dataHex)
+    {
+        byte[] data = Convert.FromHexString(dataHex);
+        const int EncLengthPos = 6;
+        if (data.Length >= EncLengthPos + 2 + 2 && data[0] == 0)
+        {
+            int encLength = (data[EncLengthPos] << 8) | data[EncLengthPos + 1];
+            int payloadLengthPos = EncLengthPos + 2 + encLength;
+            if (payloadLengthPos + 2 <= data.Length)
+            {
+                int payloadLength = (data[payloadLengthPos] << 8) | data[payloadLengthPos + 1];
+                if (payloadLength > 0 && payloadLengthPos + 2 + payloadLength == data.Length)
+                {
+                    data[5] = 0; // config_id
+                    Array.Clear(data, EncLengthPos + 2, encLength);
+                    Array.Clear(data, payloadLengthPos + 2, payloadLength);
+                    return Convert.ToHexString(data).ToLowerInvariant();
+                }
+            }
+        }
+        return new string('0', dataHex.Length);
     }
 }
